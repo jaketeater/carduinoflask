@@ -1,0 +1,141 @@
+<!doctype html>
+<html>
+<head>
+    <meta charset="utf-8">
+	<meta name="viewport" content="width=device-width, user-scalable=no,initial-scale=1, maximum-scale=1">
+    <title>Force demo</title>
+<script
+  src="https://code.jquery.com/jquery-3.1.1.js"
+  integrity="sha256-16cdPddA6VdVInumRGo6IbivbERE8p7CQR3HzTBuELA="
+  crossorigin="anonymous"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/1.7.3/socket.io.min.js"></script>
+</head>
+<body onload="init()">
+  <div id="a"></div>
+  <div id="b"></div>
+  <button id="forward" style="-webkit-user-select: none; position:fixed; right:0px; top: 0px; height:135px; width: 135px;background: green;"></button>
+  <button id="backward" style="-webkit-user-select: none; position:fixed; right:0px; bottom:0px; height:135px; width: 135px;background: red;"></button>
+  <div></div>
+  <script type="text/javascript">
+function init()
+{
+  /*
+  First we will establish the socket connection, using the port specified in the python 
+  code and the servers IP address
+  */
+  var socket = new io.connect('10.0.0.112:8080');
+  socket.connect(); 
+
+  /*
+  Next are some functions to be called when specific events happen. 
+  
+  For example, The first one will be used to handle when the forward button is pressed.
+  Specifically, we will add it to the event that is triggered when a touch is started.  
+  This will make it fire immediately.  
+  */
+  function handleForwardStart() {
+    $("#b").text("forward")
+    socket.emit("forward");
+  }
+  function handleForwardEnd() {
+    $("#b").text("stop")
+    socket.emit("stop");
+  }
+  function handleBackwardStart() {
+    $("#b").text("backward")
+    socket.emit("backward");
+  }
+  function handleBackwardEnd() {
+    $("#b").text("stop")
+    socket.emit("stop");
+  }
+
+  /*
+  First we set a variable that is the element we want to use as forward button.
+  
+  Then we bind the touchstart event to the handleForwardStart function we created above. Now,
+  whenever a touch is detected on that button, the socket connection will emit "forward" to 
+  the server.
+  */
+  var forward = document.getElementById("forward");
+  forward.addEventListener("touchstart", handleForwardStart, false);
+  forward.addEventListener("touchend", handleForwardEnd, false);
+
+  var backward = document.getElementById("backward");
+  backward.addEventListener("touchstart", handleBackwardStart, false);
+  backward.addEventListener("touchend", handleBackwardEnd, false);
+
+  /*
+  Using the accelerometer to turn the car is a little more complex.  
+  
+  Since with the arduino we don't need to constantly send a signal (we don't need to 'hold the 
+  button down'), we are going to track the current direction, as well as the previous direction.
+  
+  This will allow us to detect changes, (direction doesn't equal oldDirection) and only emit 
+  when the direction has changed.  
+  */
+  var direction = "straight";
+  var oldDirection = "x";
+
+  // First, make sure the device has an accelerometer.
+  if (window.DeviceOrientationEvent) {
+    
+    // This event fires when the accelerometers are read, which is basically constantly.
+    window.addEventListener("deviceorientation", function(accelEvent) 
+    {
+      // < -20 = left
+      // > 20 = right
+      // $("#a").text(accelEvent.beta)
+	      
+	  /*
+	  We receive an accelerometer event object that contains one property that we will use - beta
+	  
+	  beta is "The current orientation of the device around the X axis; that is, how far the 
+	  device is tipped forward or backward." 
+	  
+	  https://developer.mozilla.org/en-US/docs/Web/Events/deviceorientation
+	  
+	  For my phone, if I held it sideways (portrait) and rotated it left and right (like driving 
+	  with a Wii remote) beta was what I needed.  This might be different for your phone, and if 
+	  so, you will need to change the variables below.  For example, instead of beta (X axis), you 
+	  may want gamma (Y axis) or alpha (Z axis):
+	  
+	  accelEvent.gamma
+	  accelEvent.alpha
+	  
+	  Just try experimenting with each one.  
+	  */
+	  
+	  // Just like a joy stick, we need a deadZone. Inside the deadZone we drive straight.
+	  var deadZone = 20;
+
+	  // First, check if the reading is outside the top end of the deadzone.
+	  if (accelEvent.beta > deadZone){
+        $("#a").text("left")
+		// Set the direction variable
+        direction = "left"
+      } else if (accelEvent.beta < deadZone * -1) {
+        $("#a").text("right")
+        direction = "right"
+      } else {
+        $("#a").text("straight")
+        direction = "straight"
+      }
+	  
+	  /* 
+	  Now that the direction variable reflects the current state, check to see if it is different than
+	  the previous state.  If it is different, emit the new direction.
+	  */
+      if (direction != oldDirection) {
+        socket.emit(direction);
+        oldDirection = direction;
+      }
+    }, true);
+
+  } else {
+    alert("Sorry, your browser doesn't support Device Orientation");
+  } 
+}
+  </script>
+</body>
+</html>
